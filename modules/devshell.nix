@@ -12,14 +12,6 @@ let
   # environment.
   strOrPackage = import ../nix/strOrPackage.nix { inherit lib pkgs; };
 
-  # Transform the env vars into bash exports
-  envToBash = env:
-    builtins.concatStringsSep "\n"
-      (lib.mapAttrsToList
-        (k: v: "export ${k}=${lib.escapeShellArg (toString v)}")
-        env
-      );
-
   # Use this to define a flake app for the environment.
   mkFlakeApp = bin: {
     type = "app";
@@ -55,9 +47,6 @@ let
 
   # Write a bash profile to load
   env = pkgs.writeText "devshell-env.bash" ''
-    # Set all the passed environment variables
-    ${envToBash cfg.env}
-
     # Expose the folder that contains the assembled environment.
     export DEVSHELL_DIR=@devshellDir@
 
@@ -65,6 +54,8 @@ let
     PATH=''${PATH%:/path-not-set}
     PATH=''${PATH#${bashBin}:}
     export PATH=$DEVSHELL_DIR/bin:${bashBin}:$PATH
+
+    ${cfg.env_setup}
 
     ${textClosureMap id (addAttributeName "startup" cfg.startup) (attrNames cfg.startup)}
 
@@ -149,10 +140,10 @@ in
       '';
     };
 
-    env = mkOption {
+    env_setup = mkOption {
       internal = true;
-      default = { };
-      type = types.attrs;
+      type = types.lines;
+      default = "";
       description = ''
         Don't use this, it will be replaced soon.
       '';
@@ -218,9 +209,6 @@ in
   };
 
   config.devshell = {
-    # Expose the path to nixpkgs
-    env.NIXPKGS_PATH = toString pkgs.path;
-
     entrypoint = entrypoint;
 
     startup = {
@@ -230,14 +218,6 @@ in
           # If that folder doesn't exist, bash loves to return the whole glob
           [[ -f "$file" ]] && source "$file"
         done
-      '';
-
-      # TODO: split into a different module
-      XDG = noDepEntry ''
-        # Fill with sensible default for Ubuntu
-        : "''${XDG_DATA_DIRS:=/usr/local/share:/usr/share}"
-        # This is used by bash-completions to find new completions on demand
-        export XDG_DATA_DIRS=$DEVSHELL_DIR/share:$XDG_DATA_DIRS
       '';
 
       motd = noDepEntry ''

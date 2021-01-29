@@ -4,6 +4,14 @@ let
   # Because we want to be able to push pure JSON-like data into the
   # environment.
   strOrPackage = import ../nix/strOrPackage.nix { inherit lib pkgs; };
+
+  # Transform the env vars into bash exports
+  envToBash = env:
+    builtins.concatStringsSep "\n"
+      (lib.mapAttrsToList
+        (k: v: "export ${k}=${lib.escapeShellArg (toString v)}")
+        env
+      );
 in
 with lib;
 {
@@ -21,18 +29,9 @@ with lib;
     };
 
     env = mkOption {
+      internal = true;
       type = types.attrs;
       default = { };
-      description = ''
-        Environment variables to add to the environment.
-
-        If the value is null, it will unset the environment variable.
-        Otherwise, the value will be converted to string before being set.
-      '';
-      example = {
-        GO111MODULE = "on";
-        HTTP_PORT = 8080;
-      };
     };
 
     motd = mkOption {
@@ -57,7 +56,7 @@ with lib;
   # Copy the values over to the devshell module
   config.devshell =
     {
-      env = config.env;
+      env_setup = envToBash config.env;
       packages = config.packages;
       startup.bash_extra = noDepEntry config.bash.extra;
       interactive.bash_interactive = noDepEntry config.bash.interactive;
